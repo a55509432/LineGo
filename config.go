@@ -2,7 +2,7 @@ package goline
 
 /* server */
 
-const LINE_HOST_DOMAIN = "https://gw.line.naver.jp"
+const LINE_HOST_DOMAIN = "https://gws.line.naver.jp"
 const LINE_HOST_DOMAIN_PROXY = "https://gwx.line.naver.jp"
 const LINE_OBS_DOMAIN = "https://obs.line-apps.com"
 const LINE_W_DOMAIN = "https://w.line.me"
@@ -32,7 +32,7 @@ const LINE_SQUARE_QUERY_PATH = "/SQ1"
 const LINE_SHOP_QUERY_PATH = "/SHOP4"
 const LINE_LIFF_QUERY_PATH = "/LIFF1"
 
-const PRIMARY_DEVICE = "IOS\t11.5.0\tiOS\t14.4.2"
+const PRIMARY_DEVICE = "ANDROID\t13.8.0\tAndroid OS\t9.0.0"
 const SECONDARY_DEVICE = "IOSIPAD\t11.5.0\tiOS\t14.4.2"
 const THIRD_DEVICE = "ANDROIDLITE\t2.17.1\tAndroid OS\t1"
 const ANDROID_DEVICE = "ANDROID\t11.5.0\tAndroid OS\t9.0.0"
