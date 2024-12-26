@@ -1,4 +1,4 @@
-package line
+package linego
 
 
 import (
