@@ -1,4 +1,4 @@
-module github.com/a55509432/linego
+module linego
 
 go 1.23.0
 
