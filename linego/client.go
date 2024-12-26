@@ -9,7 +9,7 @@ import (
     "net/http"
 	"net/url"
 	"unsafe"
-    "thriftlinego"
+    _ "github.com/a55509432/linego/thriftlinego"
 )
 // Client contains everything necessary to connect to and interact with the Line API.
 type Client struct {
