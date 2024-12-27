@@ -40,7 +40,7 @@ type LINE struct {
 	userAgent       string
 }
 
-func NewLogin() *LINE {
+func NewLogin(proxy string) *LINE {
 	p := new(LINE)
 	p.AuthToken = ""
 	p.AppName = PRIMARY_DEVICE
@@ -52,7 +52,7 @@ func NewLogin() *LINE {
 	p.timeLineHeader = map[string]string{}
 	p.liffTokens = map[string]string{}
 	p.e2eePubKeys = map[string]*LineThrift.E2EEPublicKey{}
-	p.Proxy = "http://u2O66487af5738e8:1aQqX8cL5UC9iWxsVV@62.112.141.4:44001"
+	p.Proxy = proxy
 	p.reqSeq = 1000
 	p.ctx, p.Cancel = context.WithCancel(context.TODO())
 	p.Friends = []string{}

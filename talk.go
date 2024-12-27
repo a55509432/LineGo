@@ -115,8 +115,8 @@ func (p *LINE) GetE2EEPublicKeys() (r []*LineThrift.E2EEPublicKey, err error) {
 
 func (p *LINE) FetchOperations(rev int64, count int32) (r []*LineThrift.Operation, err error) {
 	//res, err := p.PollService().FetchOps(p.ctx, rev, count, 0, 0)
-	res, err := p.PollService().FetchOperations(p.ctx, rev, count)
-	// res, err := p.PollService().FetchOps(p.ctx, rev, count, p.GlobalRev, p.IndividualRev)
+	// res, err := p.PollService().FetchOperations(p.ctx, rev, count)
+	res, err := p.PollService().FetchOps(p.ctx, rev, count, p.GlobalRev, p.IndividualRev)
 	return res, err
 }
 
