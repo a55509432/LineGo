@@ -444,7 +444,7 @@ func (p *LINE) StartMigration() error {
 }
 
 func (p *LINE) TryMigration(data map[string]string) (string, error) {
-	nb := NewLogin()
+	nb := NewLogin("")
 	session := data["si"]
 	identifier, _ := hex.DecodeString(data["qi"])
 	nonce := randomBytes(12)
