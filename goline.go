@@ -6,6 +6,10 @@ import (
 	"net/http"
 	"strings"
 
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
+
+
 	"github.com/a55509432/linego/LineThrift"
 	"github.com/a55509432/linego/thrift"
 
@@ -23,10 +27,12 @@ type LINE struct {
 	Number          int                 `json:"number"`
 	Proxy           string              `json:"proxy"`
 	E2EEKey         *LineThrift.E2EEKey `json:"e2eeKey"`
+	E2EEKeys         []*LineThrift.E2EEKey 
 	GlobalRev       int64               `json:"globalRev"`
 	IndividualRev   int64               `json:"individualRev"`
 	Friends         []string            `json:"-"`
 	Limit           bool                `json:"-"`
+	DB 				*sql.DB
 	pushClient      *LineThrift.TalkServiceClient
 	connection      *http.Client
 	fast_connection *fasthttp.Client
@@ -40,7 +46,7 @@ type LINE struct {
 	userAgent       string
 }
 
-func NewLogin(proxy string) *LINE {
+func NewLogin(proxy string, db *sql.DB) *LINE {
 	p := new(LINE)
 	p.AuthToken = ""
 	p.AppName = PRIMARY_DEVICE
@@ -56,6 +62,7 @@ func NewLogin(proxy string) *LINE {
 	p.reqSeq = 1000
 	p.ctx, p.Cancel = context.WithCancel(context.TODO())
 	p.Friends = []string{}
+	p.DB = db
 	return p
 }
 

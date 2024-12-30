@@ -19,6 +19,8 @@ import (
 
 /* files */
 
+
+
 func (p *LINE) SaveFile(path string, data io.Reader) error {
 	f, err := os.Create("data.txt")
 	if err != nil {

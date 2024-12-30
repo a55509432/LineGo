@@ -5,14 +5,20 @@ import (
 
 	"github.com/a55509432/linego/LineThrift"
 
-	//"time"
+
 	"encoding/base64"
 	"encoding/json"
 
 	"github.com/tidwall/gjson"
-	//    "crypto/sha256"
-	//    "encoding/base64"
 )
+
+type E2eeKeyData struct {
+    mid    string
+    keyId  int32
+    privKey   string
+    pubKey   string
+    e2eeVersion int32
+}
 
 type Results struct {
 	Result struct {
@@ -66,28 +72,63 @@ func (p *LINE) LoadService(showLog bool) (err error) {
 	return err
 }
 
-func (p *LINE) LoadE2EEKeys() error {
-	if keeps, err := p.GetKeeps("0", "30"); err == nil {
-		if gjson.Get(keeps, "message").String() == "success" {
-			pubKeys, err := p.GetE2EEPublicKeys()
-			if err != nil || len(pubKeys) < 1 {
-				return err
-			}
-			for _, keep := range gjson.Get(keeps, `result.contents.#(contentData.#(text%"e2ee_key: *")).contentData`).Array() {
-				bData, _ := base64.StdEncoding.DecodeString(keep.Get("text").String()[10:])
-				var myKey *LineThrift.E2EEKey
-				json.Unmarshal(bData, &myKey)
-				if myKey.KeyId == pubKeys[0].KeyId {
-					p.E2EEKey = myKey
-					fmt.Println(p.E2EEKey)
-				}
-			}
-			return nil
-		}
-	} else {
+// func (p *LINE) LoadE2EEKeys() error {
+// 	if keeps, err := p.GetKeeps("0", "30"); err == nil {
+// 		if gjson.Get(keeps, "message").String() == "success" {
+// 			pubKeys, err := p.GetE2EEPublicKeys()
+// 			if err != nil || len(pubKeys) < 1 {
+// 				return err
+// 			}
+// 			for _, keep := range gjson.Get(keeps, `result.contents.#(contentData.#(text%"e2ee_key: *")).contentData`).Array() {
+// 				bData, _ := base64.StdEncoding.DecodeString(keep.Get("text").String()[10:])
+// 				var myKey *LineThrift.E2EEKey
+// 				json.Unmarshal(bData, &myKey)
+// 				if myKey.KeyId == pubKeys[0].KeyId {
+// 					p.E2EEKey = myKey
+// 					fmt.Println(p.E2EEKey)
+// 				}
+// 			}
+// 			return nil
+// 		}
+// 	} else {
+// 		return err
+// 	}
+// 	return fmt.Errorf("unknown error")
+// }
+
+func (p *LINE) LoadE2EEKeys()  error {
+	
+    var e2eekeydata E2eeKeyData
+	
+	sqltext,err := p.DB.Prepare("select * from line_e2eekeydata where mid =?")
+	if err != nil {
 		return err
 	}
-	return fmt.Errorf("unknown error")
+	rows, err := sqltext.Query(p.MID)
+	if err != nil {
+		return err
+	}
+    for rows.Next() {
+        err = rows.Scan(&e2eekeydata.mid, &e2eekeydata.keyId, &e2eekeydata.privKey, &e2eekeydata.pubKey, &e2eekeydata.e2eeVersion)
+
+		if err != nil {
+			return err
+		}
+		privkey,err := base64.StdEncoding.DecodeString(e2eekeydata.privKey)
+		if err != nil {
+			return err
+		}
+		publickey,err := base64.StdEncoding.DecodeString(e2eekeydata.pubKey)
+		if err != nil {
+			return err
+		}
+		
+		ek := *LineThrift.E2EEKey{Version:e2eekeydata.e2eeVersion,keyId:e2eekeydata.keyId,privKey:privkey,pubKey:publickey}
+		e2eeKeys = append(e2eeKeys,ek)
+    }
+	p.E2EEKey = e2eeKeys[0]
+	p.E2EEKeys = e2eeKeys
+	return nil
 }
 
 func (p *LINE) LoginWithAuthToken(authToken string) error {
