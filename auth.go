@@ -72,30 +72,6 @@ func (p *LINE) LoadService(showLog bool) (err error) {
 	return err
 }
 
-// func (p *LINE) LoadE2EEKeys() error {
-// 	if keeps, err := p.GetKeeps("0", "30"); err == nil {
-// 		if gjson.Get(keeps, "message").String() == "success" {
-// 			pubKeys, err := p.GetE2EEPublicKeys()
-// 			if err != nil || len(pubKeys) < 1 {
-// 				return err
-// 			}
-// 			for _, keep := range gjson.Get(keeps, `result.contents.#(contentData.#(text%"e2ee_key: *")).contentData`).Array() {
-// 				bData, _ := base64.StdEncoding.DecodeString(keep.Get("text").String()[10:])
-// 				var myKey *LineThrift.E2EEKey
-// 				json.Unmarshal(bData, &myKey)
-// 				if myKey.KeyId == pubKeys[0].KeyId {
-// 					p.E2EEKey = myKey
-// 					fmt.Println(p.E2EEKey)
-// 				}
-// 			}
-// 			return nil
-// 		}
-// 	} else {
-// 		return err
-// 	}
-// 	return fmt.Errorf("unknown error")
-// }
-
 func (p *LINE) LoadE2EEKeys()  error {
 	var e2eeKeys []*LineThrift.E2EEKey
     var e2eekeydata E2eeKeyData
@@ -122,8 +98,7 @@ func (p *LINE) LoadE2EEKeys()  error {
 		if err != nil {
 			return err
 		}
-		
-		ek := *LineThrift.E2EEKey{Version:e2eekeydata.e2eeVersion,KeyId:e2eekeydata.keyId,PrivateKey:privkey,PublicKey:publickey}
+		ek := &LineThrift.E2EEKey{Version:e2eekeydata.e2eeVersion,KeyId:e2eekeydata.keyId,PrivateKey:privkey,PublicKey:publickey}
 		e2eeKeys = append(e2eeKeys,ek)
     }
 	p.E2EEKey = e2eeKeys[0]
