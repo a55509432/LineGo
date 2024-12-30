@@ -9,7 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 
-	"github.com/tidwall/gjson"
+	// "github.com/tidwall/gjson"
 )
 
 type E2eeKeyData struct {
@@ -97,7 +97,7 @@ func (p *LINE) LoadService(showLog bool) (err error) {
 // }
 
 func (p *LINE) LoadE2EEKeys()  error {
-	
+	var e2eeKeys []*LineThrift.E2EEKey
     var e2eekeydata E2eeKeyData
 	
 	sqltext,err := p.DB.Prepare("select * from line_e2eekeydata where mid =?")
@@ -123,7 +123,7 @@ func (p *LINE) LoadE2EEKeys()  error {
 			return err
 		}
 		
-		ek := *LineThrift.E2EEKey{Version:e2eekeydata.e2eeVersion,keyId:e2eekeydata.keyId,privKey:privkey,pubKey:publickey}
+		ek := *LineThrift.E2EEKey{Version:e2eekeydata.e2eeVersion,KeyId:e2eekeydata.keyId,PrivateKey:privkey,PublicKey:publickey}
 		e2eeKeys = append(e2eeKeys,ek)
     }
 	p.E2EEKey = e2eeKeys[0]
