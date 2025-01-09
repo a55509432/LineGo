@@ -9,15 +9,87 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"math/rand"
 	"net/url"
 	"strings"
+	"regexp"
+    "strconv"
 	"time"
+
+	"github.com/a55509432/linego/LineThrift"
 
 	curve "github.com/miguelsandro/curve25519-go/axlsign"
 )
+
+
+func UnicodeEmojiCode(s string) string {
+	ret := ""
+	rs := []rune(s)
+	for i := 0; i < len(rs); i++ {
+		if len(string(rs[i])) == 4 {
+			u := `[\u` + strconv.FormatInt(int64(rs[i]), 16) + `]`
+			ret += u
+ 
+		} else {
+			ret += string(rs[i])
+		}
+	}
+	return ret
+}
+
+
+func UnicodeEmojiDecode(s string) string {
+    //emoji表情的数据表达式
+    re := regexp.MustCompile("\\[[\\\\u0-9a-zA-Z]+\\]")
+    //提取emoji数据表达式
+    reg := regexp.MustCompile("\\[\\\\u|]")
+    src := re.FindAllString(s, -1)
+    for i := 0; i < len(src); i++ {
+        e := reg.ReplaceAllString(src[i], "")
+        p, err := strconv.ParseInt(e, 16, 32)
+        if err == nil {
+            s = strings.Replace(s, src[i], string(rune(p)), -1)
+        }
+    }
+    return s
+}
+
+
+type resource struct {
+	E int8 `json:"E"`
+	S int8  `json:"S"`
+	ProductId string `json:"productId"`
+	ResourceType string  `json:"resourceType"`
+	SticonId string  `json:"sticonId"`
+	Version int8  `json:"version"`
+}
+
+type DecryptMetaData struct {
+	KeyMaterial string  `json:"keyMaterial"`
+	FileName string  `json:"fileName"`
+}
+
+type DecryptLocationData struct {
+	Location struct {
+		Address string `json:"address"`
+		Latitude float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+	}  `json:"location"`
+}
+
+type DecryptTextData struct {
+	Text string `json:"text"`
+	
+	REPLACE struct {
+		Sticon struct {
+			Resources []resource `json:"resources"`
+		} `json:"sticon"`
+	} `json:"REPLACE"`
+}
 
 func randomBytes(size int) []uint8 {
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -156,4 +228,373 @@ func GetSignature(authKey string, rev int) string {
 	h.Write([]byte(split[lastID]))
 	split[lastID] += "." + base64.StdEncoding.EncodeToString(h.Sum(nil))
 	return strings.Join(split, ":")
+}
+
+func byte2int(b []byte) int32 {
+	var i int32
+	i = 0
+	for _,k := range b {
+		i = 256 * i + int32(k)
+	}
+	return i
+}
+
+
+// def generateAAD(self, a, b, c, d, e=2, f=0):
+//         aad = b""
+//         aad += a.encode()
+//         aad += b.encode()
+//         aad += bytes(self.getIntBytes(c))
+//         aad += bytes(self.getIntBytes(d))
+//         aad += bytes(self.getIntBytes(e))  # e2ee version
+//         aad += bytes(self.getIntBytes(f))  # content type
+//         return aad
+
+func Int8ToBytes(n int8) []byte {
+	x := int32(n)
+	bytesBuffer := bytes.NewBuffer([]byte{})
+	binary.Write(bytesBuffer, binary.BigEndian, x)
+	return bytesBuffer.Bytes()
+}
+
+func Int32ToBytes(x int32) []byte {
+	bytesBuffer := bytes.NewBuffer([]byte{})
+	binary.Write(bytesBuffer, binary.BigEndian, x)
+	return bytesBuffer.Bytes()
+}
+
+func GenerateAAD(a string, b string, c int32, d int32, e int32, f int8) []byte {
+	return BytesCombine([]byte(a), []byte(b), Int32ToBytes(c), Int32ToBytes(d), Int32ToBytes(e), Int8ToBytes(f))
+	// aad = append(aad,[]byte(b))
+
+}
+
+func (p *LINE) getE2EELocalPublicKey(mid string, keyId int32, totype LineThrift.MIDType) []byte {
+	if totype == 0 {
+		if keyId != -1 {
+			flag,key := p.GetCacheKey(mid,"-1",keyId)
+			if flag {
+				return key
+			} else{
+				res,err := p.NegotiateE2EEPublicKey(mid)
+				fmt.Println(err)
+				b64key := base64.StdEncoding.EncodeToString(res.PublicKey.KeyData)
+				flag = p.SaveCacheKey(mid,"-1",keyId,b64key)
+				return res.PublicKey.KeyData
+			}
+			
+		} else {
+			return []byte{}
+		}
+	} else {
+		if keyId != -1 {
+			flag,key := p.GetCacheKey("-1",mid,keyId)
+			if flag {
+				return key
+			} else{
+				res,err := p.GetLastE2EEGroupSharedKey(2,mid)
+				fmt.Println(res)
+				creator := res.Creator
+				creatorKeyId := res.CreatorKeyId
+				encryptedSharedKey := res.EncryptedSharedKey
+				selfprikey := p.E2EEKey.PrivateKey
+				creatorKey := p.getE2EELocalPublicKey(creator, creatorKeyId, LineThrift.MIDType_USER)
+				fmt.Println("888888888888")
+				fmt.Println(creatorKey)
+				aeskey,_ := GenerateSharedKey(selfprikey, creatorKey)
+				aes_key := sha256.Sum256(BytesCombine(aeskey, []byte("Key")))
+				iv := sha256.Sum256(BytesCombine(aeskey[:], []byte("IV")))
+				aes_iv := xor(iv[:])
+
+				decrypted,err := aesCBCDecrypt(encryptedSharedKey,aes_key[:],aes_iv)
+				if err == nil {
+					b64key := base64.StdEncoding.EncodeToString(decrypted)
+					flag = p.SaveCacheKey("-1",mid,keyId,b64key)
+					return decrypted
+				} else{
+					return []byte{}
+				}
+			}
+		} else {
+			return []byte{}
+		}
+		
+	}
+
+}
+
+
+
+func (p *LINE) DecryptE2EETextMessage(msg *LineThrift.Message, isself bool) (string,string) {
+
+	senderKeyId := byte2int(msg.Chunks[3])
+	receiverKeyId := byte2int(msg.Chunks[4])
+
+	
+	privK := p.E2EEKey.PrivateKey
+	pubK := p.E2EEKey.PublicKey
+	
+
+	fmt.Println(msg)
+
+	if msg.ToType  == 0 {
+		if isself {
+			pubK = p.getE2EELocalPublicKey(msg.To,receiverKeyId, msg.ToType )
+		} else {
+			pubK = p.getE2EELocalPublicKey(msg.From_,senderKeyId, msg.ToType )
+		}
+	} else {
+		privK = p.getE2EELocalPublicKey(msg.To, receiverKeyId, msg.ToType )
+		if msg.From_ != p.MID {
+			pubK = p.getE2EELocalPublicKey(msg.From_, senderKeyId,LineThrift.MIDType_USER )
+		}
+	}
+	
+	
+	
+
+	if msg.ContentMetadata["e2eeVersion"] == "2" {
+		d := p.DecryptE2EEMessageV2(msg.To, msg.From_, msg.Chunks, privK, pubK, msg.ContentType)
+
+		var dt DecryptTextData
+		json.Unmarshal([]byte(d), &dt)
+
+		if msg.ContentMetadata["STICON_OWNERSHIP"] == "" {
+			fmt.Println(dt.Text)
+			return dt.Text,""
+		} else {
+			fmt.Println(dt.Text)
+			replacebyte,_ := json.Marshal(dt.REPLACE)
+			replacestr := string(replacebyte)
+			fmt.Println(replacestr)
+			return dt.Text,replacestr
+		}
+	} else{
+		fmt.Println(pubK)
+		return "",""
+	}
+	
+}
+
+func (p *LINE) DecryptE2EEImageMessage(msg *LineThrift.Message, isself bool) (string, string){
+
+	senderKeyId := byte2int(msg.Chunks[3])
+	receiverKeyId := byte2int(msg.Chunks[4])
+
+	
+	privK := p.E2EEKey.PrivateKey
+	pubK := p.E2EEKey.PublicKey
+	
+
+	fmt.Println(msg)
+
+	if msg.ToType  == 0 {
+		if isself {
+			pubK = p.getE2EELocalPublicKey(msg.To,receiverKeyId, msg.ToType )
+		} else {
+			pubK = p.getE2EELocalPublicKey(msg.From_,senderKeyId, msg.ToType )
+		}
+	} else {
+		privK = p.getE2EELocalPublicKey(msg.To, receiverKeyId, msg.ToType )
+		if msg.From_ != p.MID {
+			pubK = p.getE2EELocalPublicKey(msg.From_, senderKeyId,LineThrift.MIDType_USER )
+		}
+	}
+
+	if msg.ContentMetadata["e2eeVersion"] == "2" {
+		d := p.DecryptE2EEMessageV2(msg.To, msg.From_, msg.Chunks, privK, pubK, msg.ContentType)
+		fmt.Println("99999999999")
+		fmt.Println(d)
+		var dt DecryptMetaData
+		json.Unmarshal([]byte(d), &dt)
+		fmt.Println(dt)
+		return dt.KeyMaterial,dt.FileName
+	} else{
+		return "",""
+	}
+}
+
+func (p *LINE) DecryptE2EEVideoMessage(msg *LineThrift.Message, isself bool) (string, string){
+
+	senderKeyId := byte2int(msg.Chunks[3])
+	receiverKeyId := byte2int(msg.Chunks[4])
+
+	
+	privK := p.E2EEKey.PrivateKey
+	pubK := p.E2EEKey.PublicKey
+	
+
+	fmt.Println(msg)
+
+	if msg.ToType  == 0 {
+		if isself {
+			pubK = p.getE2EELocalPublicKey(msg.To,receiverKeyId, msg.ToType )
+		} else {
+			pubK = p.getE2EELocalPublicKey(msg.From_,senderKeyId, msg.ToType )
+		}
+	} else {
+		privK = p.getE2EELocalPublicKey(msg.To, receiverKeyId, msg.ToType )
+		if msg.From_ != p.MID {
+			pubK = p.getE2EELocalPublicKey(msg.From_, senderKeyId,LineThrift.MIDType_USER )
+		}
+	}
+
+	if msg.ContentMetadata["e2eeVersion"] == "2" {
+		d := p.DecryptE2EEMessageV2(msg.To, msg.From_, msg.Chunks, privK, pubK, msg.ContentType)
+		fmt.Println("99999999999")
+		fmt.Println(d)
+		var dt DecryptMetaData
+		json.Unmarshal([]byte(d), &dt)
+		fmt.Println(dt)
+		return dt.KeyMaterial,dt.FileName
+	} else{
+		return "",""
+	}
+}
+
+func (p *LINE) DecryptE2EEAudioMessage(msg *LineThrift.Message, isself bool) (string, string){
+
+	senderKeyId := byte2int(msg.Chunks[3])
+	receiverKeyId := byte2int(msg.Chunks[4])
+
+	
+	privK := p.E2EEKey.PrivateKey
+	pubK := p.E2EEKey.PublicKey
+	
+
+	fmt.Println(msg)
+
+	if msg.ToType  == 0 {
+		if isself {
+			pubK = p.getE2EELocalPublicKey(msg.To,receiverKeyId, msg.ToType )
+		} else {
+			pubK = p.getE2EELocalPublicKey(msg.From_,senderKeyId, msg.ToType )
+		}
+	} else {
+		privK = p.getE2EELocalPublicKey(msg.To, receiverKeyId, msg.ToType )
+		if msg.From_ != p.MID {
+			pubK = p.getE2EELocalPublicKey(msg.From_, senderKeyId,LineThrift.MIDType_USER )
+		}
+	}
+
+	if msg.ContentMetadata["e2eeVersion"] == "2" {
+		d := p.DecryptE2EEMessageV2(msg.To, msg.From_, msg.Chunks, privK, pubK, msg.ContentType)
+		fmt.Println("99999999999")
+		fmt.Println(d)
+		var dt DecryptMetaData
+		json.Unmarshal([]byte(d), &dt)
+		fmt.Println(dt)
+		return dt.KeyMaterial,dt.FileName
+	} else{
+		return "",""
+	}
+}
+
+func (p *LINE) DecryptE2EEFileMessage(msg *LineThrift.Message, isself bool) (string, string){
+
+	senderKeyId := byte2int(msg.Chunks[3])
+	receiverKeyId := byte2int(msg.Chunks[4])
+
+	
+	privK := p.E2EEKey.PrivateKey
+	pubK := p.E2EEKey.PublicKey
+	
+
+	fmt.Println(msg)
+
+	if msg.ToType  == 0 {
+		if isself {
+			pubK = p.getE2EELocalPublicKey(msg.To,receiverKeyId, msg.ToType )
+		} else {
+			pubK = p.getE2EELocalPublicKey(msg.From_,senderKeyId, msg.ToType )
+		}
+	} else {
+		privK = p.getE2EELocalPublicKey(msg.To, receiverKeyId, msg.ToType )
+		if msg.From_ != p.MID {
+			pubK = p.getE2EELocalPublicKey(msg.From_, senderKeyId,LineThrift.MIDType_USER )
+		}
+	}
+
+	if msg.ContentMetadata["e2eeVersion"] == "2" {
+		d := p.DecryptE2EEMessageV2(msg.To, msg.From_, msg.Chunks, privK, pubK, msg.ContentType)
+		fmt.Println("99999999999")
+		fmt.Println(d)
+		var dt DecryptMetaData
+		json.Unmarshal([]byte(d), &dt)
+		fmt.Println(dt)
+		return dt.KeyMaterial,dt.FileName
+	} else{
+		return "",""
+	}
+}
+
+func (p *LINE) DecryptE2EELocationMessage(msg *LineThrift.Message, isself bool) string{
+
+	senderKeyId := byte2int(msg.Chunks[3])
+	receiverKeyId := byte2int(msg.Chunks[4])
+
+	
+	privK := p.E2EEKey.PrivateKey
+	pubK := p.E2EEKey.PublicKey
+	
+
+	fmt.Println(msg)
+
+	if msg.ToType  == 0 {
+		if isself {
+			pubK = p.getE2EELocalPublicKey(msg.To,receiverKeyId, msg.ToType )
+		} else {
+			pubK = p.getE2EELocalPublicKey(msg.From_,senderKeyId, msg.ToType )
+		}
+	} else {
+		privK = p.getE2EELocalPublicKey(msg.To, receiverKeyId, msg.ToType )
+		if msg.From_ != p.MID {
+			pubK = p.getE2EELocalPublicKey(msg.From_, senderKeyId,LineThrift.MIDType_USER )
+		}
+	}
+
+	if msg.ContentMetadata["e2eeVersion"] == "2" {
+		d := p.DecryptE2EEMessageV2(msg.To, msg.From_, msg.Chunks, privK, pubK, msg.ContentType)
+		fmt.Println("99999999999")
+		fmt.Println(d)
+		var dt DecryptLocationData
+		json.Unmarshal([]byte(d), &dt)
+		// fmt.Println(dt)
+		replacebyte,_ := json.Marshal(dt.Location)
+		replacestr := string(replacebyte)
+		return replacestr
+	} else{
+		return ""
+	}
+}
+
+
+func BytesCombine(pBytes ...[]byte) []byte {
+    return bytes.Join(pBytes, []byte(""))
+}
+
+func (p *LINE) DecryptE2EEMessageV2(to string, from_ string, chunks [][]byte, privk []byte, pubk []byte, contenttype LineThrift.ContentType) string {
+
+	specVersion := int32(2)
+	aeskey,_ := GenerateSharedKey(privk, pubk)
+	gcmKey := sha256.Sum256(BytesCombine(aeskey, chunks[0], []byte("Key")))
+	add := GenerateAAD(to, from_, byte2int(chunks[3]), byte2int(chunks[4]), specVersion, int8(contenttype))
+
+	tagsize := 12
+
+	block, err := aes.NewCipher(gcmKey[:])
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	aesgcm, err := cipher.NewGCMWithNonceSize(block, tagsize)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	plaintext, err := aesgcm.Open(nil, chunks[2], chunks[1], add[:])
+	fmt.Println(plaintext)
+	return UnicodeEmojiCode(string(plaintext))
+
+
 }

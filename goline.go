@@ -32,6 +32,8 @@ type LINE struct {
 	IndividualRev   int64               `json:"individualRev"`
 	Friends         []string            `json:"-"`
 	Limit           bool                `json:"-"`
+	SubscriptionIds  map[string]int64
+	SyncToken		string
 	DB 				*sql.DB
 	pushClient      *LineThrift.TalkServiceClient
 	connection      *http.Client
@@ -53,6 +55,7 @@ func NewLogin(proxy string, db *sql.DB) *LINE {
 	p.userAgent = "Line/" + strings.Split(p.AppName, "\t")[1]
 	p.Certificate = ""
 	p.Revision = 0
+	p.SyncToken = ""
 	p.MID = ""
 	p.Limit = false
 	p.timeLineHeader = map[string]string{}

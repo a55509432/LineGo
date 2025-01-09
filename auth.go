@@ -41,6 +41,7 @@ func getResult(body []byte) (*Results, error) {
 
 func (p *LINE) LoadService(showLog bool) (err error) {
 	getprof, err := p.GetProfile()
+	
 	if err != nil {
 		return err
 	}
@@ -72,11 +73,13 @@ func (p *LINE) LoadService(showLog bool) (err error) {
 	return err
 }
 
+
+
 func (p *LINE) LoadE2EEKeys()  error {
 	var e2eeKeys []*LineThrift.E2EEKey
     var e2eekeydata E2eeKeyData
 	
-	sqltext,err := p.DB.Prepare("select * from line_e2eekeydata where mid =?")
+	sqltext,err := p.DB.Prepare("select * from line_e2eekeydata where mid =? order by keyId desc")
 	if err != nil {
 		return err
 	}
@@ -98,6 +101,7 @@ func (p *LINE) LoadE2EEKeys()  error {
 		if err != nil {
 			return err
 		}
+		
 		ek := &LineThrift.E2EEKey{Version:e2eekeydata.e2eeVersion,KeyId:e2eekeydata.keyId,PrivateKey:privkey,PublicKey:publickey}
 		e2eeKeys = append(e2eeKeys,ek)
     }
